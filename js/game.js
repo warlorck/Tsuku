@@ -5,18 +5,14 @@ var player;
 var cursors;
 var bushes;
 var bullets;
+var enemies;
 var mov_keys;
 var gun_keys;
-
-function destroyBullet(bullet)
-{
-	console.log("destroy");
-}
 
 function fire(key_event)
 {
 	let bullet = bullets.create(player.x, player.y, 'bullet_sprite');
-	bullet.body.onWorldBounds = true; // todo
+	bullet.setScale(1/2);
 	if (key_event.keyCode == gun_keys.LEFT.keyCode) {
 		bullet.setVelocityX(-1);
 	} else if (key_event.keyCode == gun_keys.RIGHT.keyCode) {
@@ -42,6 +38,10 @@ class DesertScene extends Phaser.Scene
 		);
 		this.load.image('hero_sprite', 'assets/hero_idle.png');
 		this.load.image('bullet_sprite', 'assets/bullet2.png');
+		this.load.spritesheet(
+			'zombie_sheet', 'assets/enemy-sheet.png',
+			{frameWidth: 32, frameHeight: 32}
+		);
 	}
 	
 	create()
@@ -54,7 +54,7 @@ class DesertScene extends Phaser.Scene
 		
 		this.anims.create({
 			key: 'bush_dance',
-			frames: this.anims.generateFrameNumbers('bush_image', { start: 0, end: 1 }),
+			frames: this.anims.generateFrameNumbers('bush_image', {start: 0, end: 1}),
 			frameRate: 4,
 			repeat: -1
 		});
@@ -82,13 +82,17 @@ class DesertScene extends Phaser.Scene
 		gun_keys.LEFT.on("down", fire);
 		gun_keys.RIGHT.on("down", fire);
 		
-		this.physics.world.on('worldbounds', (body) =>
-        {
-            const bullet = body.gameObject;
-			bullet.destroy();
-        }); // todo
+		bullets = this.physics.add.group();
 		
-		bullets = this.physics.add.group({collideWorldBounds: true}); // todo
+		enemies = this.physics.add.group();
+		this.anims.create({
+			key: 'zombie_walk',
+			frames: this.anims.generateFrameNumbers('zombie_sheet', {start: 0, end: 1}),
+			frameRate: 4,
+			repeat: -1
+		});
+		let enemy = enemies.create(400, 400, 'zombie_sheet');
+		enemy.play("zombie_walk");
 	}
 	
 	update()
@@ -112,7 +116,22 @@ class DesertScene extends Phaser.Scene
 		// Normalize and scale the velocity so that player can't move faster along a diagonal
 		player.body.velocity.normalize().scale(player_speed);
 		
-		cursors = this.input.keyboard.createCursorKeys();
+		clearBullets(this);
+	}
+}
+
+function clearBullets(scene)
+{
+	let i = bullets.getLength();
+	while (i--) {
+		let bullet = bullets.getChildren()[i];
+		if ((bullet.x < -(bullet.displayWidth/2))
+			|| (bullet.x > (scene.game.config.width + bullet.displayWidth/2))
+			|| (bullet.y < -(bullet.displayHeight/2))
+			|| (bullet.y > (scene.game.config.height + bullet.displayHeight/2)))
+		{
+			bullet.destroy();
+		} 
 	}
 }
 	
