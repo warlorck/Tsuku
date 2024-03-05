@@ -1,6 +1,8 @@
 const tile_size = 32;
 const player_speed = 160;
 const bullet_speed = 300;
+const zombie_speed = 100;
+const debug_game = true;
 var player;
 var cursors;
 var bushes;
@@ -8,6 +10,7 @@ var bullets;
 var enemies;
 var mov_keys;
 var gun_keys;
+
 
 function fire(key_event)
 {
@@ -42,6 +45,10 @@ class DesertScene extends Phaser.Scene
 			'zombie_sheet', 'assets/enemy-sheet.png',
 			{frameWidth: 32, frameHeight: 32}
 		);
+		this.load.spritesheet(
+			'explosion_sheet', 'assets/explosion_pixelfied-sheet.png',
+			{frameWidth: 32, frameHeight: 32}
+		);
 	}
 	
 	create()
@@ -67,8 +74,6 @@ class DesertScene extends Phaser.Scene
 		});
 		
 		player = this.physics.add.sprite(100, 450, 'hero_sprite');
-		player.setCollideWorldBounds(true);
-		this.physics.add.collider(player, bushes);
 		
 		mov_keys = this.input.keyboard.addKeys({
 			up: "W",
@@ -92,7 +97,18 @@ class DesertScene extends Phaser.Scene
 			repeat: -1
 		});
 		let enemy = enemies.create(400, 400, 'zombie_sheet');
+		enemy.setScale(10);
 		enemy.play("zombie_walk");
+		
+		this.anims.create({
+			key: 'explosion',
+			frames: this.anims.generateFrameNumbers('explosion_sheet', {start: 0, end: 15}),
+			frameRate: 16
+		});
+
+		player.setCollideWorldBounds(true);
+		this.physics.add.collider(player, bushes);
+		this.physics.add.collider(bullets, enemies, bulletHitEnemy);
 	}
 	
 	update()
@@ -117,6 +133,9 @@ class DesertScene extends Phaser.Scene
 		player.body.velocity.normalize().scale(player_speed);
 		
 		clearBullets(this);
+		
+		enemies.getChildren().forEach(enemy =>
+			this.physics.moveToObject(enemy, player, zombie_speed));
 	}
 }
 
@@ -134,6 +153,17 @@ function clearBullets(scene)
 		} 
 	}
 }
+
+function bulletHitEnemy(bullet, enemy)
+{
+	bullet.destroy();
+	enemy.body.enable = false;
+	enemy.play('explosion');
+    enemy.once('animationcomplete', () =>  {
+        console.log("anmiation complete");
+        enemy.destroy();
+    })
+}
 	
 var config = {
 	type: Phaser.AUTO,
@@ -143,7 +173,9 @@ var config = {
 	physics: {
 		default: 'arcade',
 		arcade: {
-			debug: false
+			debug: true,
+			debugShowBody: true,
+			debugShowStaticBody: false,
 		}
 	},
 	scene: DesertScene
