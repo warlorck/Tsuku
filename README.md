@@ -1,9 +1,7 @@
 TODO
 ====
 
-- Knockback
-- Screen shaking
-- Hitbox
+- Integration site
 - Start menu
 - Life point
 - Score
@@ -11,4 +9,9 @@ TODO
 - UI
 - Sound
 - Viewports
-- Distribution
+- Screen shaking
+- Knockback
+- Tir diagonale
+
+- Zoom => OK
+- Hitbox cercle => OK
