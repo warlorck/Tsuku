@@ -22,7 +22,7 @@ var life_text;
 
 function fire(key_event)
 {
-  scene.scene.launch('GameOverScene');
+  //scene.scene.launch('GameOverScene');
   let bullet = bullets.create(player.x, player.y, 'bullet_sprite');
   bullet.setScale(1/2);
   if (key_event.keyCode == gun_keys.LEFT.keyCode) {
@@ -72,6 +72,11 @@ function set_camera(scene)
 
 class DesertScene extends Phaser.Scene
 {
+  constructor()
+  {
+    super({ key: 'DesertScene' });
+  }
+
   preload()
   {
     this.load.tilemapTiledJSON("desert_map", "assets/maps/desert.json");
@@ -258,7 +263,7 @@ function enemyHitPlayer(player, enemy)
   life--;
   life_text.setText('x '+life.toString());
   if (life == 0) {
-    //this.scene.launch('GameOverScene');
+    scene.scene.launch('GameOverScene');
   }
 
   scene.tweens.add({
@@ -295,11 +300,21 @@ class UI extends Phaser.Scene   {
   }
 }
 
+const gameover_fade_duration = 1000;
+const gameover_fade_text_duration = 1500;
+
 class GameOver extends Phaser.Scene
 {
+  retry_enable;
+
   constructor()
   {
     super({ key: 'GameOverScene' });
+  }
+
+  resetScene()
+  {
+    this.retry_enable = false;
   }
 
   preload()
@@ -309,6 +324,10 @@ class GameOver extends Phaser.Scene
 
   create()
   {
+    this.resetScene();
+
+    this.scene.pause('DesertScene');
+
 		// fade to black
     let camWidth = this.cameras.main.width;
     let camHeight = this.cameras.main.height;
@@ -318,19 +337,49 @@ class GameOver extends Phaser.Scene
     this.tweens.add({
       targets: rt,
       props: {
-        alpha: { value: 0.5, duration: 1000},
-      },
-      ease: 'Linear'
+        alpha: { value: 0.5, duration: gameover_fade_duration},
+      }
     });
 
-    let image = this.add.image(0, 0, 'skull');
+    let image = this.add.image(300, camHeight / 2, 'skull').setOrigin(0.5);
     image.setAlpha(0);
     this.tweens.add({
       targets: image,
       props: {
-        alpha: { value: 1, duration: 2000},
+        alpha: { value: 1, duration: gameover_fade_text_duration},
+      }
+    });
+
+    let gameover_text = this.add.text(600, camHeight / 2, 'Wasted...', {
+      fontSize: '70px'
+    }).setOrigin(0.5);
+    gameover_text.setAlpha(0);
+    this.tweens.add({
+      targets: gameover_text,
+      props: {
+        alpha: { value: 1, duration: gameover_fade_text_duration},
+      }
+    });
+
+    let retry_text = this.add.text(600, camHeight / 2 + 50, '<Press a key to retry>', {
+      fontSize: '30px'
+    }).setOrigin(0.5);
+    retry_text.setAlpha(0);
+    this.tweens.add({
+      targets: retry_text,
+      props: {
+        alpha: { value: 1, duration: gameover_fade_text_duration},
       },
-      ease: 'Linear'
+      onComplete: () => {
+        this.retry_enable = true;
+      }
+    });
+
+    this.input.keyboard.on('keydown', function (event) {
+      if (this.scene.retry_enable) {
+        this.scene.scene.restart('DesertScene');
+        this.scene.scene.stop();
+      }
     });
   }
 }
