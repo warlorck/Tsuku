@@ -30,7 +30,7 @@ class GameOver extends Phaser.Scene
     this.scene.pause('DesertScene');
 
     this.death_theme = this.sound.add('agony', {
-      volume: 0.2
+      volume: 0.6
     });
     this.death_theme.play();
 

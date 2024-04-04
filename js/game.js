@@ -3,10 +3,8 @@
  ******************************************************************************/
 
 const zombie_speed = 70;
-const hitbox_margin = 5
 
 var game_scene;
-
 var is_fullscreen;
 
 /******************************************************************************
@@ -35,6 +33,7 @@ function read_enemies_spawns(map)
 const player_accel = 40;
 const player_speed = 160;
 const bullet_speed = 300;
+const hitbox_margin = 5
 
 var player;
 var invincibility;
@@ -80,7 +79,7 @@ function body_direction(velocity)
   }
 }
 
-function sprite_animation(sprite)
+function sprite_animation(sprite, prefix)
 {
   if (sprite.body.velocity.length() < 0.1) {
     return;
@@ -89,15 +88,15 @@ function sprite_animation(sprite)
   let direction = body_direction(sprite.body.velocity);
 
   if (direction == "LEFT") {
-    sprite.play('tsuku_left_anim', true);
+    sprite.play(prefix + '_left_anim', true);
     sprite.setFlipX(false);
   } else if (direction == "RIGHT") {
-    sprite.play('tsuku_left_anim', true);
+    sprite.play(prefix + '_left_anim', true);
     sprite.setFlipX(true);
   } else if (direction == "UP") {
-    sprite.play('tsuku_back_anim', true);
+    sprite.play(prefix + '_back_anim', true);
   } else if (direction == "DOWN") {
-    sprite.play('tsuku_front_anim', true);
+    sprite.play(prefix + '_front_anim', true);
   }
 }
 
@@ -148,12 +147,11 @@ function pop_enemies(delta)
   let chance = Phaser.Math.Between(0, 100);
   if (chance < enemy_pop_probability) {
     let random_spawn = Phaser.Math.RND.pick(spawns);
-    let enemy = enemies.create(random_spawn.x, random_spawn.y, 'tsuku_front');
+    let enemy = enemies.create(random_spawn.x, random_spawn.y, 'enemy_front');
+    enemy.setBodySize(enemy.displayWidth/2, enemy.displayHeight/2, true);
     enemy.setScale(1.5).refreshBody();
     enemy.depth = 2;
-    radius = Math.min(enemy.displayWidth, enemy.displayHeight) / 5;
-    //enemy.setCircle(radius);
-    enemy.setCircle(radius, enemy.displayWidth/8, enemy.displayHeight/4);
+    //enemy.setCircle(12, 5, 20);
     enemy.setPushable(false);
   }
 }
@@ -195,6 +193,48 @@ function enemyHitPlayer(player, enemy)
     onComplete: () => {
       invincibility = false;
     }
+  });
+}
+
+function enemies_preload(scene)
+{
+  let width = 38;
+  let height = 50;
+  scene.load.spritesheet(
+    'enemy_front', 'assets/enemy_front.png',
+    {frameWidth: width, frameHeight: height}
+  );
+
+  scene.load.spritesheet(
+    'enemy_back', 'assets/enemy_back.png',
+    {frameWidth: width, frameHeight: height}
+  );
+
+  scene.load.spritesheet(
+    'enemy_left', 'assets/enemy_left.png',
+    {frameWidth: width, frameHeight: height}
+  );
+}
+
+function enemies_create_animations(scene)
+{
+  scene.anims.create({
+    key: 'enemy_front_anim',
+    frames: scene.anims.generateFrameNumbers('enemy_front', {start: 0, end: 3}),
+    frameRate: 4,
+    repeat: -1
+  });
+  scene.anims.create({
+    key: 'enemy_back_anim',
+    frames: scene.anims.generateFrameNumbers('enemy_back', {start: 0, end: 2}),
+    frameRate: 4,
+    repeat: -1
+  });
+  scene.anims.create({
+    key: 'enemy_left_anim',
+    frames: scene.anims.generateFrameNumbers('enemy_left', {start: 0, end: 1}),
+    frameRate: 4,
+    repeat: -1
   });
 }
 
@@ -260,6 +300,8 @@ class DesertScene extends Phaser.Scene
 
     this.load.audio('gunshot', ['assets/sounds/shot.wav']);
     this.load.audio('battle_theme', ['assets/sounds/battle_theme.mp3']);
+
+    enemies_preload(this);
   }
 
   create()
@@ -294,10 +336,10 @@ class DesertScene extends Phaser.Scene
     read_enemies_spawns(map);
 
     player = this.physics.add.sprite(400, 200, 'tsuku_front');
-    player.setCircle(player.displayWidth/2-hitbox_margin, hitbox_margin, hitbox_margin);
+    player.setBodySize(player.displayWidth/2-hitbox_margin, player.displayHeight/2-hitbox_margin, true);
+    player.setScale(1.5);
     player.setCollideWorldBounds(true);
     player.setPushable(false);
-    player.setScale(1.5);
     player.depth = 2;
 
     this.anims.create({
@@ -377,21 +419,28 @@ class DesertScene extends Phaser.Scene
     this.events.on('pause', function(event) {
       event.scene.battle_theme.stop();
     })
+
+    enemies_create_animations(this);
   }
 
   update(time, delta)
   {
     pop_enemies(delta);
     player_movement();
-    sprite_animation(player);
+    sprite_animation(player, 'tsuku');
     enemies.getChildren().forEach(enemy =>
-      game_scene.physics.moveToObject(enemy, player, zombie_speed)
-    );
-    enemies.getChildren().forEach(enemy =>
-      sprite_animation(enemy)
+        enemy_update(enemy)
     );
 
     clearBullets(this);
+  }
+}
+
+function enemy_update(enemy)
+{
+  game_scene.physics.moveToObject(enemy, player, zombie_speed);
+  if (enemy.body.enable) {
+    sprite_animation(enemy, 'enemy');
   }
 }
 
@@ -407,9 +456,9 @@ var config = {
   physics: {
     default: 'arcade',
     arcade: {
-      debug: true,
-      debugShowBody: true,
-      debugShowStaticBody: true,
+      debug: false,
+      debugShowBody: false,
+      debugShowStaticBody: false,
     }
   },
   scene: [DesertScene, UI, GameOver]
