@@ -1,21 +1,105 @@
-const player_accel = 40;
-const player_speed = 160;
-const bullet_speed = 300;
+/******************************************************************************
+ * Global
+ ******************************************************************************/
+
 const zombie_speed = 70;
 const hitbox_margin = 5
 
-var player;
-var bullets;
-var enemies;
-var mov_keys;
-var gun_keys;
 var game_scene;
+
+var is_fullscreen;
+
+/******************************************************************************
+ * Map
+ ******************************************************************************/
+
 var spawns;
 
+function read_enemies_spawns(map)
+{
+  let spawn_objs = map.createFromObjects('spawns', {
+    name: 'spawn'
+  });
+  spawns = [];
+  while (spawn_objs.length > 0) {
+    let point = spawn_objs.pop();
+    point.visible = false;
+    spawns.push(new Phaser.Math.Vector2(point.x, point.y));
+  }
+}
+
+/******************************************************************************
+ * Player
+ ******************************************************************************/
+
+const player_accel = 40;
+const player_speed = 160;
+const bullet_speed = 300;
+
+var player;
 var invincibility;
-var is_fullscreen;
-var enemy_per_second;
 var life;
+var mov_keys;
+var gun_keys;
+var bullets;
+
+function player_movement()
+{
+  player.setVelocity(0);
+
+  if (mov_keys.left.isDown) {
+    player.setVelocityX(-1);
+  }
+  else if (mov_keys.right.isDown) {
+    player.setVelocityX(1);
+  }
+
+  if (mov_keys.up.isDown) {
+    player.setVelocityY(-1);
+  } else if (mov_keys.down.isDown) {
+    player.setVelocityY(1);
+  }
+
+  // Normalize and scale the velocity so that player can't move faster along a diagonal
+  player.body.velocity.normalize().scale(player_speed);
+}
+
+function body_direction(velocity)
+{
+  let degree = Phaser.Math.RadToDeg(velocity.angle())
+  let direction = Phaser.Math.RoundTo(degree / 45);
+  switch (direction) {
+    case 0:
+      return "RIGHT";
+    case 1: case 2: case 3:
+      return "DOWN";
+    case 4:
+      return "LEFT";
+    case 5: case 6: case 7:
+      return "UP";
+  }
+}
+
+function sprite_animation(sprite)
+{
+  if (sprite.body.velocity.length() < 0.1) {
+    return;
+  }
+
+  let direction = body_direction(sprite.body.velocity);
+
+  if (direction == "LEFT") {
+    sprite.play('tsuku_left_anim', true);
+    sprite.setFlipX(false);
+  } else if (direction == "RIGHT") {
+    sprite.play('tsuku_left_anim', true);
+    sprite.setFlipX(true);
+  } else if (direction == "UP") {
+    sprite.play('tsuku_back_anim', true);
+  } else if (direction == "DOWN") {
+    sprite.play('tsuku_front_anim', true);
+  }
+}
 
 function fire(key_event)
 {
@@ -36,18 +120,27 @@ function fire(key_event)
   game_scene.sound.play('gunshot');
 }
 
-function read_enemies_spawns(map)
+function clearBullets(scene)
 {
-  let spawn_objs = map.createFromObjects('spawns', {
-    name: 'spawn'
-  });
-  spawns = [];
-  while (spawn_objs.length > 0) {
-    let point = spawn_objs.pop();
-    point.visible = false;
-    spawns.push(new Phaser.Math.Vector2(point.x, point.y));
+  let i = bullets.getLength();
+  while (i--) {
+    let bullet = bullets.getChildren()[i];
+    if ((bullet.x < -(bullet.displayWidth/2))
+      || (bullet.x > (scene.game.config.width + bullet.displayWidth/2))
+      || (bullet.y < -(bullet.displayHeight/2))
+      || (bullet.y > (scene.game.config.height + bullet.displayHeight/2)))
+    {
+      bullet.destroy();
+    } 
   }
 }
+
+/******************************************************************************
+ * Enemies
+ ******************************************************************************/
+
+var enemies;
+var enemy_per_second;
 
 function pop_enemies(delta)
 {
@@ -55,14 +148,59 @@ function pop_enemies(delta)
   let chance = Phaser.Math.Between(0, 100);
   if (chance < enemy_pop_probability) {
     let random_spawn = Phaser.Math.RND.pick(spawns);
-    let enemy = enemies.create(random_spawn.x, random_spawn.y, 'zombie_sheet');
-    enemy.setScale(1.5);
+    let enemy = enemies.create(random_spawn.x, random_spawn.y, 'tsuku_front');
+    enemy.setScale(1.5).refreshBody();
     enemy.depth = 2;
-    enemy.setCircle(enemy.displayWidth/2-hitbox_margin, hitbox_margin, hitbox_margin);
-    enemy.play("zombie_walk");
+    radius = Math.min(enemy.displayWidth, enemy.displayHeight) / 5;
+    //enemy.setCircle(radius);
+    enemy.setCircle(radius, enemy.displayWidth/8, enemy.displayHeight/4);
     enemy.setPushable(false);
   }
 }
+
+function bulletHitEnemy(bullet, enemy)
+{
+  bullet.destroy();
+  enemy.body.enable = false;
+  enemy.play('explosion');
+  enemy.once('animationcomplete', () =>  {
+    enemy.destroy();
+  })
+}
+
+function enemyHitPlayer(player, enemy)
+{
+  player.setVelocity(0);
+  enemy.setVelocity(0);
+
+  if (invincibility) {
+    return;
+  }
+
+  invincibility = true;
+
+  life--;
+  life_text.setText('x '+life.toString());
+  if (life == 0) {
+    game_scene.scene.launch('GameOverScene');
+  }
+
+  game_scene.tweens.add({
+    targets: player,
+    props: {
+      alpha: { value: 0, duration: 200, yoyo: true },
+    },
+    repeat: 1,
+    ease: 'Linear',
+    onComplete: () => {
+      invincibility = false;
+    }
+  });
+}
+
+/******************************************************************************
+ * Main Scene
+ ******************************************************************************/
 
 function set_camera(scene)
 {
@@ -230,7 +368,10 @@ class DesertScene extends Phaser.Scene
 
     this.scene.launch('UIScene');
 
-    this.battle_theme = this.sound.add('battle_theme');
+    this.battle_theme = this.sound.add('battle_theme', {
+      volume: 0.5,
+      loop: true
+    });
     this.battle_theme.play();
 
     this.events.on('pause', function(event) {
@@ -242,93 +383,16 @@ class DesertScene extends Phaser.Scene
   {
     pop_enemies(delta);
     player_movement();
+    sprite_animation(player);
     enemies.getChildren().forEach(enemy =>
-      game_scene.physics.moveToObject(enemy, player, zombie_speed));
+      game_scene.physics.moveToObject(enemy, player, zombie_speed)
+    );
+    enemies.getChildren().forEach(enemy =>
+      sprite_animation(enemy)
+    );
 
     clearBullets(this);
   }
-}
-
-function player_movement()
-{
-  player.setVelocity(0);
-
-  if (mov_keys.left.isDown) {
-    player.setVelocityX(-1);
-    player.play('tsuku_left_anim', true);
-    player.setFlipX(false);
-  }
-  else if (mov_keys.right.isDown) {
-    player.setVelocityX(1);
-    player.play('tsuku_left_anim', true);
-    player.setFlipX(true);
-  }
-
-  if (mov_keys.up.isDown) {
-    player.setVelocityY(-1);
-    player.play('tsuku_back_anim', true);
-  } else if (mov_keys.down.isDown) {
-    player.setVelocityY(1);
-    player.play('tsuku_front_anim', true);
-  }
-
-  // Normalize and scale the velocity so that player can't move faster along a diagonal
-  player.body.velocity.normalize().scale(player_speed);
-}
-
-function clearBullets(scene)
-{
-  let i = bullets.getLength();
-  while (i--) {
-    let bullet = bullets.getChildren()[i];
-    if ((bullet.x < -(bullet.displayWidth/2))
-      || (bullet.x > (scene.game.config.width + bullet.displayWidth/2))
-      || (bullet.y < -(bullet.displayHeight/2))
-      || (bullet.y > (scene.game.config.height + bullet.displayHeight/2)))
-    {
-      bullet.destroy();
-    } 
-  }
-}
-
-function bulletHitEnemy(bullet, enemy)
-{
-  bullet.destroy();
-  enemy.body.enable = false;
-  enemy.play('explosion');
-  enemy.once('animationcomplete', () =>  {
-    enemy.destroy();
-  })
-}
-
-function enemyHitPlayer(player, enemy)
-{
-  player.setVelocity(0);
-  enemy.setVelocity(0);
-
-  if (invincibility) {
-    return;
-  }
-
-  invincibility = true;
-
-  life--;
-  life_text.setText('x '+life.toString());
-  if (life == 0) {
-    game_scene.scene.launch('GameOverScene');
-  }
-
-  game_scene.tweens.add({
-    targets: player,
-    props: {
-      alpha: { value: 0, duration: 200, yoyo: true },
-    },
-    repeat: 1,
-    ease: 'Linear',
-    onComplete: () => {
-      invincibility = false;
-    }
-  });
 }
 
 var config = {
@@ -343,9 +407,9 @@ var config = {
   physics: {
     default: 'arcade',
     arcade: {
-      debug: false,
-      debugShowBody: false,
-      debugShowStaticBody: false,
+      debug: true,
+      debugShowBody: true,
+      debugShowStaticBody: true,
     }
   },
   scene: [DesertScene, UI, GameOver]

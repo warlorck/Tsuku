@@ -1,17 +1,12 @@
 TODO
 ====
 
-- Integration site
-- Start menu
-- Life point
+- Font
+- Idle
 - Score
-- Spawn points
-- UI
-- Sound
-- Viewports
-- Screen shaking
-- Knockback
+- cooldown gun
+- redo spawn
+- Start menu
 - Tir diagonale
-
-- Zoom => OK
-- Hitbox cercle => OK
+- Essayer sur d'autres navigateur
+- Integration site

@@ -29,7 +29,9 @@ class GameOver extends Phaser.Scene
 
     this.scene.pause('DesertScene');
 
-    this.death_theme = this.sound.add('agony');
+    this.death_theme = this.sound.add('agony', {
+      volume: 0.2
+    });
     this.death_theme.play();
 
     // fade to black
@@ -54,23 +56,13 @@ class GameOver extends Phaser.Scene
       }
     });
 
-    let gameover_text = this.add.text(600, camHeight / 2, 'Wasted...', {
-      fontSize: '70px'
+    let msg = 'What a horrible night\nto have a curse...\n<Press space to retry>'
+    let gameover_text = this.add.text(620, camHeight / 2, msg, {
+      fontSize: '30px'
     }).setOrigin(0.5);
     gameover_text.setAlpha(0);
     this.tweens.add({
       targets: gameover_text,
-      props: {
-        alpha: { value: 1, duration: gameover_fade_text_duration},
-      }
-    });
-
-    let retry_text = this.add.text(600, camHeight / 2 + 50, '<Press a key to retry>', {
-      fontSize: '30px'
-    }).setOrigin(0.5);
-    retry_text.setAlpha(0);
-    this.tweens.add({
-      targets: retry_text,
       props: {
         alpha: { value: 1, duration: gameover_fade_text_duration},
       },
@@ -79,7 +71,7 @@ class GameOver extends Phaser.Scene
       }
     });
 
-    this.input.keyboard.on('keydown', function (event) {
+    this.input.keyboard.on('keydown-SPACE', function (event) {
       if (this.scene.retry_enable) {
         this.scene.scene.start('DesertScene');
         this.scene.death_theme.stop();
