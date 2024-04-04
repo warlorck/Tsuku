@@ -2,10 +2,34 @@
  * Global
  ******************************************************************************/
 
-const zombie_speed = 70;
-
 var game_scene;
-var is_fullscreen;
+var is_fullscreen = false;
+var coins;
+
+function register_fullscreen_input(scene)
+{
+  // Fullscreen when you hit Alt+Enter
+  let fullscreen_key = scene.input.keyboard.addKey('ENTER');
+  fullscreen_key.on('down', function(event) {
+    if (!event.altKey) {
+      return;
+    }
+    if (is_fullscreen) {
+      scene.scale.stopFullscreen();
+    } else {
+      scene.scale.startFullscreen();
+    }
+    is_fullscreen = !is_fullscreen;
+  });
+}
+
+function difficulty(time)
+{
+  percent = time / (1000 * 120);
+  percent = (percent > 1) ? 1 : percent;
+  enemy_speed = 70 + percent * 50;
+  enemy_per_second = 0.6 + 1 * percent;
+}
 
 /******************************************************************************
  * Map
@@ -34,13 +58,15 @@ const player_accel = 40;
 const player_speed = 160;
 const bullet_speed = 300;
 const hitbox_margin = 5
+const gun_cooldown = 300;
 
 var player;
 var invincibility;
 var life;
 var mov_keys;
-var gun_keys;
 var bullets;
+var gun_keys;
+var gun_ready;
 
 function player_movement()
 {
@@ -102,19 +128,33 @@ function sprite_animation(sprite, prefix)
 
 function fire(key_event)
 {
+  if (!gun_ready) {
+    return;
+  }
+
+  game_scene.time.delayedCall(gun_cooldown, () => {
+    gun_ready = true;
+  });
+
+  gun_ready = false;
+
   let bullet = bullets.create(player.x, player.y, 'bullet_sprite');
-  bullet.setScale(1/2);
-  if (key_event.keyCode == gun_keys.LEFT.keyCode) {
+  bullet.setScale(2);
+
+  if (gun_keys.LEFT.isDown) {
     bullet.setVelocityX(-1);
-  } else if (key_event.keyCode == gun_keys.RIGHT.keyCode) {
+  } else if (gun_keys.RIGHT.isDown) {
     bullet.setVelocityX(1);
   }
-  if (key_event.keyCode == gun_keys.UP.keyCode) {
+
+  if (gun_keys.UP.isDown) {
     bullet.setVelocityY(-1);
-  } else if (key_event.keyCode == gun_keys.DOWN.keyCode) {
+  } else if (gun_keys.DOWN.isDown) {
     bullet.setVelocityY(1);
   }
   bullet.body.velocity.normalize().scale(bullet_speed);
+
+  bullet.rotation = bullet.body.velocity.angle() - Phaser.Math.PI2/4;
 
   game_scene.sound.play('gunshot');
 }
@@ -140,6 +180,7 @@ function clearBullets(scene)
 
 var enemies;
 var enemy_per_second;
+var enemy_speed;
 
 function pop_enemies(delta)
 {
@@ -156,14 +197,51 @@ function pop_enemies(delta)
   }
 }
 
+const coin_pop_probability = 15;
+const coin_duration = 10000;
+
+function pop_coin(x, y)
+{
+  let chance = Phaser.Math.Between(0, 100);
+  if (chance < coin_pop_probability) {
+    let coin = coins.create(x, y, 'coin');
+    coin.play('spin');
+    game_scene.time.delayedCall(coin_duration, () => {
+      coin.destroy();
+    });
+  }
+}
+
+const wilhelm_probability = 5;
+
+function wilhelm()
+{
+  let chance = Phaser.Math.Between(0, 100);
+  if (chance < wilhelm_probability) {
+    game_scene.sound.play('wilhelm');
+  } else {
+    game_scene.sound.play('quack');
+  }
+}
+
 function bulletHitEnemy(bullet, enemy)
 {
   bullet.destroy();
   enemy.body.enable = false;
   enemy.play('explosion');
+  wilhelm();
   enemy.once('animationcomplete', () =>  {
+    pop_coin(enemy.body.x, enemy.body.y);
     enemy.destroy();
   })
+  updateScore(1);
+}
+
+function playerHitCoin(player, coin)
+{
+  game_scene.sound.play('coin_sound');
+  coin.destroy();
+  updateScore(5);
 }
 
 function enemyHitPlayer(player, enemy)
@@ -258,26 +336,28 @@ class DesertScene extends Phaser.Scene
   resetScene()
   {
     invincibility = false;
-    is_fullscreen = false;
+    //is_fullscreen = false;
     enemy_per_second = 1;
+    enemy_speed = 70;
     life = 3;
+    score = 0;
+    gun_ready = true;
   }
 
   preload()
   {
     this.load.tilemapTiledJSON("desert_map", "assets/maps/desert.json");
-    this.load.image('ground_image', 'assets/maps/ground_tileset.png');
-    this.load.image('tuiles_image', 'assets/maps/tuiles.png');
+    this.load.image('ground_center', 'assets/maps/Ground_Center.png');
+    this.load.image('ground_main', 'assets/maps/Ground_Main.png');
+    this.load.image('ground_side', 'assets/maps/Ground_side.png');
+    this.load.image('ground_step', 'assets/maps/Ground_step.png');
     this.load.spritesheet(
       'bush_image', 'assets/maps/bush_tileset.png',
       {frameWidth: 32, frameHeight: 32}
     );
+
     this.load.image('hero_sprite', 'assets/hero_idle.png');
-    this.load.image('bullet_sprite', 'assets/bullet2.png');
-    this.load.spritesheet(
-      'zombie_sheet', 'assets/enemy-sheet.png',
-      {frameWidth: 32, frameHeight: 32}
-    );
+    this.load.image('bullet_sprite', 'assets/Kunai.png');
     this.load.spritesheet(
       'explosion_sheet', 'assets/explosion_pixelfied-sheet.png',
       {frameWidth: 32, frameHeight: 32}
@@ -297,9 +377,16 @@ class DesertScene extends Phaser.Scene
       'tsuku_left', 'assets/tsuku_left.png',
       {frameWidth: 34, frameHeight: 52}
     );
+    this.load.spritesheet(
+      'coin', 'assets/coin.png',
+      {frameWidth: 32, frameHeight: 32}
+    );
 
     this.load.audio('gunshot', ['assets/sounds/shot.wav']);
     this.load.audio('battle_theme', ['assets/sounds/battle_theme.mp3']);
+    this.load.audio('coin_sound', ['assets/sounds/coin.mp3']);
+    this.load.audio('wilhelm', ['assets/sounds/wilhelmscream.mp3']);
+    this.load.audio('quack', ['assets/sounds/quack.mp3']);
 
     enemies_preload(this);
   }
@@ -310,15 +397,23 @@ class DesertScene extends Phaser.Scene
 
     set_camera(this);
 
+    this.anims.create({
+      key: 'spin',
+      frames: this.anims.generateFrameNumbers('coin', { start: 0, end: 5 }),
+      frameRate: 16,
+      repeat: -1
+    });
+
     game_scene = this;
     const map = this.make.tilemap({ key: 'desert_map' });
-    const ground_tileset = map.addTilesetImage('ground_tileset', 'ground_image');
-    const tuiles_tileset = map.addTilesetImage('tuiles_tileset', 'tuiles_image');
-    const bush_tileset = map.addTilesetImage('bush_tileset', 'bush_image');
-    //map.createLayer('ground', ground_tileset);
-    map.createLayer('ground', tuiles_tileset);
-    var bush_layer = map.createLayer('bushes', bush_tileset);
+    const ground_center = map.addTilesetImage('Middle_Ground', 'ground_center');
+    const ground_main = map.addTilesetImage('Main_Ground', 'ground_main');
+    const ground_side = map.addTilesetImage('Side_Ground', 'ground_side');
+    const ground_step = map.addTilesetImage('Step_Ground', 'ground_step');
 
+    const bush_tileset = map.addTilesetImage('bush_tileset', 'bush_image');
+    map.createLayer('ground', [ground_center, ground_main, ground_side, ground_step]);
+    var bush_layer = map.createLayer('bushes', bush_tileset);
     this.anims.create({
       key: 'bush_dance',
       frames: this.anims.generateFrameNumbers('bush_image', {start: 0, end: 1}),
@@ -326,7 +421,7 @@ class DesertScene extends Phaser.Scene
       repeat: -1
     });
 
-    const bushes_tiles = map.createFromTiles([6], -1, { useSpriteSheet: true });
+    const bushes_tiles = map.createFromTiles([1], -1, { useSpriteSheet: true });
     let bushes = this.physics.add.staticGroup();
     bushes_tiles.forEach((bush) => {
       bushes.add(bush);
@@ -374,28 +469,19 @@ class DesertScene extends Phaser.Scene
     gun_keys.RIGHT.on("down", fire);
 
     // Fullscreen when you hit Alt+Enter
-    let fullscreen_key = this.input.keyboard.addKey('ENTER');
-    fullscreen_key.on('down', function(event) {
-      if (!event.altKey) {
-        return;
-      }
-      if (is_fullscreen) {
-        game_scene.scale.stopFullscreen();
-      } else {
-        game_scene.scale.startFullscreen();
-      }
-      is_fullscreen = !is_fullscreen;
-    });
-
-    bullets = this.physics.add.group();
-
-    enemies = this.physics.add.group();
-    this.anims.create({
-      key: 'zombie_walk',
-      frames: this.anims.generateFrameNumbers('zombie_sheet', {start: 0, end: 1}),
-      frameRate: 4,
-      repeat: -1
-    });
+    //let fullscreen_key = this.input.keyboard.addKey('ENTER');
+    //fullscreen_key.on('down', function(event) {
+    //  if (!event.altKey) {
+    //    return;
+    //  }
+    //  if (is_fullscreen) {
+    //    game_scene.scale.stopFullscreen();
+    //  } else {
+    //    game_scene.scale.startFullscreen();
+    //  }
+    //  is_fullscreen = !is_fullscreen;
+    //});
+    register_fullscreen_input(this);
 
     this.anims.create({
       key: 'explosion',
@@ -403,6 +489,11 @@ class DesertScene extends Phaser.Scene
       frameRate: 16
     });
 
+    bullets = this.physics.add.group();
+    enemies = this.physics.add.group();
+    coins = this.physics.add.group();
+
+    this.physics.add.overlap(player, coins, playerHitCoin);
     this.physics.add.overlap(bullets, enemies, bulletHitEnemy);
     this.physics.add.collider(enemies, bushes);
     this.physics.add.collider(player, bushes);
@@ -425,6 +516,7 @@ class DesertScene extends Phaser.Scene
 
   update(time, delta)
   {
+    difficulty(time);
     pop_enemies(delta);
     player_movement();
     sprite_animation(player, 'tsuku');
@@ -438,7 +530,7 @@ class DesertScene extends Phaser.Scene
 
 function enemy_update(enemy)
 {
-  game_scene.physics.moveToObject(enemy, player, zombie_speed);
+  game_scene.physics.moveToObject(enemy, player, enemy_speed);
   if (enemy.body.enable) {
     sprite_animation(enemy, 'enemy');
   }
@@ -446,9 +538,10 @@ function enemy_update(enemy)
 
 var config = {
   type: Phaser.AUTO,
+  parent: "mygame",
   scale: {
     mode: Phaser.Scale.FIT,
-    autoCenter: Phaser.Scale.CENTER_BOTH,
+    autoCenter: Phaser.Scale.CENTER_HORIZONTALLY,
     width: 1000,
     height: 800
   },
@@ -461,7 +554,7 @@ var config = {
       debugShowStaticBody: false,
     }
   },
-  scene: [DesertScene, UI, GameOver]
+  scene: [Menu, DesertScene, UI, GameOver]
   //scene: [Menu]
 };
 

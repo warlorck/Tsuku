@@ -47,7 +47,7 @@ class GameOver extends Phaser.Scene
       }
     });
 
-    let image = this.add.image(300, camHeight / 2, 'skull').setOrigin(0.5);
+    let image = this.add.image(590, camHeight / 2 - 100, 'skull').setOrigin(0.5);
     image.setAlpha(0);
     this.tweens.add({
       targets: image,
@@ -56,9 +56,9 @@ class GameOver extends Phaser.Scene
       }
     });
 
-    let msg = 'What a horrible night\nto have a curse...\n<Press space to retry>'
-    let gameover_text = this.add.text(620, camHeight / 2, msg, {
-      fontSize: '30px'
+    let msg = '           Vous êtes nul\nAppuyez sur Espace pour recommencer'
+    let gameover_text = this.add.text(600, camHeight / 2, msg, {
+      fontSize: '25px'
     }).setOrigin(0.5);
     gameover_text.setAlpha(0);
     this.tweens.add({
